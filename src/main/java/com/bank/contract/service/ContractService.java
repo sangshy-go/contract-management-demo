@@ -82,14 +82,32 @@ public class ContractService {
 
     /**
      * 创建合同
-     * ⚠️ 问题：参数校验缺失，contractNo可能重复，amount可能为负
      */
     @Transactional
     public Contract createContract(Contract contract) {
-        // ⚠️ Bug风险：没有校验必填字段
-        // 应该校验：contractNo, contractName, amount 等必填
+        // Bug修复：校验必填字段
+        if (contract.getContractNo() == null || contract.getContractNo().trim().isEmpty()) {
+            throw new IllegalArgumentException("合同编号不能为空");
+        }
+        if (contract.getContractName() == null || contract.getContractName().trim().isEmpty()) {
+            throw new IllegalArgumentException("合同名称不能为空");
+        }
+        if (contract.getAmount() == null || contract.getAmount().compareTo(java.math.BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("合同金额必须大于0");
+        }
+        if (contract.getCustomerName() == null || contract.getCustomerName().trim().isEmpty()) {
+            throw new IllegalArgumentException("客户名称不能为空");
+        }
+        if (contract.getCustomerId() == null || contract.getCustomerId().trim().isEmpty()) {
+            throw new IllegalArgumentException("客户证件号不能为空");
+        }
 
-        // ⚠️ 优化点：合同编号可以自动生成
+        // Bug修复：校验合同编号唯一性
+        QueryWrapper<Contract> checkWrapper = new QueryWrapper<>();
+        checkWrapper.eq("contract_no", contract.getContractNo());
+        if (contractMapper.selectCount(checkWrapper) > 0) {
+            throw new IllegalArgumentException("合同编号已存在");
+        }
         contract.setStatus("DRAFT");
         contract.setCreateTime(LocalDateTime.now());
         contract.setUpdateTime(LocalDateTime.now());
@@ -132,8 +150,12 @@ public class ContractService {
     public Contract approve(Long contractId, String approver, Integer level, String result, String comment) {
         Contract contract = contractMapper.selectById(contractId);
 
-        // ⚠️ Bug风险：如果contract为null会NPE
-        if (contract.getStatus().equals("ARCHIVED")) {
+        // Bug修复：校验合同是否存在
+        if (contract == null) {
+            throw new RuntimeException("合同不存在");
+        }
+        // Bug修复：常量在前，避免 NPE
+        if ("ARCHIVED".equals(contract.getStatus())) {
             throw new RuntimeException("已归档的合同不能审批");
         }
 
@@ -170,7 +192,14 @@ public class ContractService {
     public Contract archive(Long contractId) {
         Contract contract = contractMapper.selectById(contractId);
 
-        // ⚠️ Bug: 如果状态不是APPROVED，不能归档（但没有校验）
+        // Bug修复：校验合同存在
+        if (contract == null) {
+            throw new RuntimeException("合同不存在");
+        }
+        // Bug修复：校验只有已审批通过才能归档
+        if (!"APPROVED".equals(contract.getStatus())) {
+            throw new RuntimeException("只有已审批通过的合同才能归档");
+        }
 
         contract.setStatus("ARCHIVED");
         contract.setUpdateTime(LocalDateTime.now());
